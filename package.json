@@ -1,0 +1,10 @@
+{
+  "name": "attractor",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "attractor.mjs",
+  "scripts": {
+    "test": "node --test attractor.test.mjs"
+  },
+  "license": "MIT"
+}

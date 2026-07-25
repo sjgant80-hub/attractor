@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>attractor · trajectory liveness classifier</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0a0a0f;--surface:#15161f;--border:#2a2c3a;--text:#e6e7ee;--dim:#9296a6;--flat:#7a8291;--alive:#4caf50;--esc:#e05a4d;font-family:system-ui,-apple-system,sans-serif}
+body{background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:1.5rem}
+.wrap{width:100%;max-width:40rem}
+h1{font-size:1.5rem;letter-spacing:.02em}
+.sub{color:var(--dim);font-size:.9rem;margin-bottom:1.2rem}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:.6rem;padding:1.1rem;margin-bottom:1rem}
+button{padding:.5rem .9rem;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:.4rem;cursor:pointer;font-size:.85rem;margin:.25rem .35rem 0 0}
+button:hover{border-color:var(--text)}
+textarea{width:100%;min-height:4rem;background:var(--bg);border:1px solid var(--border);border-radius:.4rem;color:var(--text);padding:.6rem;font-family:ui-monospace,monospace;font-size:.82rem;margin-top:.5rem}
+#verdict{font-size:1.6rem;font-weight:700;letter-spacing:.03em;margin:.3rem 0}
+.flatline{color:var(--flat)}.attractor{color:var(--alive)}.escaped{color:var(--esc)}.unknown{color:var(--dim)}
+.explain{color:var(--dim);font-size:.88rem;line-height:1.5}
+.metrics{font-family:ui-monospace,monospace;font-size:.74rem;color:var(--dim);margin-top:.6rem;word-break:break-word}
+svg{width:100%;height:130px;margin-top:.6rem;background:var(--bg);border-radius:.4rem;border:1px solid var(--border)}
+.lbl{font-size:.72rem;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>attractor</h1>
+  <p class="sub">Is a system dead, alive, or running away? Paste a trajectory — or generate one.</p>
+
+  <div class="card">
+    <span class="lbl">Generate a trajectory</span><br>
+    <button onclick="gen('flat')">Flatline</button>
+    <button onclick="gen('sine')">Bounded (sine)</button>
+    <button onclick="gen('chaos')">Bounded chaos</button>
+    <button onclick="gen('exp')">Runaway</button>
+    <button onclick="gen('noise')">Noisy bounded</button>
+    <textarea id="series" placeholder="or paste comma/space/newline-separated numbers"></textarea>
+    <button onclick="run()" style="border-color:var(--alive);color:var(--alive)">Classify ▸</button>
+  </div>
+
+  <div class="card" id="out" style="display:none">
+    <span class="lbl">Verdict</span>
+    <div id="verdict"></div>
+    <div class="explain" id="explain"></div>
+    <svg id="plot" viewBox="0 0 600 130" preserveAspectRatio="none"></svg>
+    <div class="metrics" id="metrics"></div>
+  </div>
+</div>
+
+<script type="module">
+import { classify, CLASS } from './attractor.mjs';
+
+const gens = {
+  flat: n => Array.from({length:n}, (_,i)=> 5 + (i<3? (3-i)*0.4 : 0)),
+  sine: n => Array.from({length:n}, (_,i)=> Math.sin(i*0.6)*5),
+  chaos: n => { const o=[]; let x=0.4; for(let i=0;i<n;i++){x=3.9*x*(1-x); o.push(x);} return o; },
+  exp: n => Array.from({length:n}, (_,i)=> Math.pow(1.4,i)),
+  noise: n => Array.from({length:n}, (_,i)=> 3 + Math.sin(i)*Math.cos(i*1.7)*2),
+};
+window.gen = k => { document.getElementById('series').value = gens[k](60).map(v=>Math.round(v*1000)/1000).join(', '); run(); };
+
+window.run = () => {
+  const raw = document.getElementById('series').value;
+  const xs = raw.split(/[,\s]+/).map(Number).filter(Number.isFinite);
+  const r = classify(xs);
+  document.getElementById('out').style.display = 'block';
+  const v = document.getElementById('verdict');
+  v.textContent = r.class.toUpperCase();
+  v.className = r.class;
+  document.getElementById('explain').textContent = r.explain || '';
+  document.getElementById('metrics').textContent = r.metrics ? JSON.stringify(r.metrics) : (r.reason || '');
+  plot(xs, r.class);
+};
+
+function plot(xs, cls) {
+  const svg = document.getElementById('plot');
+  if (xs.length < 2) { svg.innerHTML = ''; return; }
+  const min = Math.min(...xs), max = Math.max(...xs), range = (max - min) || 1;
+  const col = { flatline:'#7a8291', attractor:'#4caf50', escaped:'#e05a4d', unknown:'#9296a6' }[cls];
+  const pts = xs.map((y,i)=> `${(i/(xs.length-1))*600},${125 - ((y-min)/range)*120}`).join(' ');
+  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5"/>`;
+}
+</script>
+</body>
+</html>
