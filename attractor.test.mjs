@@ -58,10 +58,23 @@ test('too-short series is UNKNOWN, never guessed', () => {
   assert.match(r.reason, /at least 8/);
 });
 
-test('non-numeric junk is filtered, not crashed on', () => {
-  const r = classify([1, 'x', null, 2, undefined, 3, NaN, 4, 5, 6, 7, 8, 9]);
-  assert.notEqual(r.class, undefined);
-  assert.ok(r.metrics.n >= 8, 'kept only the finite points');
+test('non-numeric junk is filtered to EXACTLY the real numbers, not coerced to 0', () => {
+  // 9 real numbers + junk that Number() would turn into 0 (null, '', false, [], undefined, NaN, 'x')
+  const r = classify([1, 'x', null, 2, undefined, 3, NaN, 4, '', 5, false, 6, [], 7, 8, 9]);
+  assert.equal(r.metrics.n, 9, 'kept exactly the 9 numeric values, dropped every junk value');
+});
+
+test('an all-junk array is UNKNOWN, never a fabricated FLATLINE at 0', () => {
+  const r = classify([null, '', false, [], undefined, NaN, 'x', {}]);
+  assert.equal(r.class, CLASS.UNKNOWN, 'no real data → no verdict');
+});
+
+test('a bounded step-response that settles at a setpoint is FLATLINE, not ESCAPED', () => {
+  // ramps 0→10 over the first half then holds at 10 — high growth ratio but a flat, settled tail
+  const step = Array.from({ length: 40 }, (_, i) => (i < 20 ? i * 0.5 : 10));
+  const r = classify(step);
+  assert.equal(r.class, CLASS.FLATLINE, 'reached its setpoint — dead/settled, not a runaway');
+  assert.equal(r.metrics.diverging, false);
 });
 
 test('classification is deterministic — same series, same verdict', () => {

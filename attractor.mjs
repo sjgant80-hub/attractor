@@ -26,7 +26,12 @@ const DEFAULTS = {
 
 export function classify(series, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
-  const xs = (Array.isArray(series) ? series : []).map(Number).filter(Number.isFinite);
+  // Keep only genuine numeric data. Number(null)/Number('')/Number(false)/Number([]) all coerce to 0
+  // and would sneak past a bare Number.isFinite filter as fabricated zeroes, so junk gets excluded here
+  // rather than misread as a flatline at 0.
+  const xs = (Array.isArray(series) ? series : [])
+    .filter(v => typeof v === 'number' ? Number.isFinite(v) : (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))))
+    .map(Number);
   if (xs.length < o.minPoints) return { class: CLASS.UNKNOWN, alive: false, reason: `need at least ${o.minPoints} finite points, got ${xs.length}` };
 
   const n = xs.length;
@@ -45,11 +50,14 @@ export function classify(series, opts = {}) {
   const magFirst = meanAbs(firstQ), magLast = meanAbs(lastQ);
   const growth = magLast / Math.max(magFirst, 1e-9);
 
-  // Divergence: magnitude has grown strongly AND is still trending up across successive windows.
-  const windowMags = chunkMeans(xs.map(Math.abs), 4);
-  const diverging = growth > o.escapeGrowth && isTrendingUp(windowMags);
   // Settled: the recent portion barely moves relative to the trajectory's own scale.
   const settled = stdSecond < o.flatEps * scale;
+  // Divergence: magnitude has grown strongly AND is still trending up across successive windows AND
+  // has NOT settled. A bounded step-response that ramps up from a low base and then plateaus has a
+  // high growth ratio but a flat, settled tail — that is a FLATLINE (reached its setpoint), not a
+  // runaway. Requiring !settled stops the low-base growth ratio from raising a false escape alarm.
+  const windowMags = chunkMeans(xs.map(Math.abs), 4);
+  const diverging = growth > o.escapeGrowth && isTrendingUp(windowMags) && !settled;
 
   let cls;
   if (diverging) cls = CLASS.ESCAPED;
