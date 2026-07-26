@@ -1,0 +1,37 @@
+[
+  {
+    "mutation": "> → >=",
+    "snippet": "for (let i = 1; i < n; i++) { if (xs[i] < min) min = xs[i]; if (xs[i] > max) max = xs[i]; ",
+    "reason": "equivalent: idempotent max assign. When xs[i] === max the mutant reassigns max = xs[i] to the same value, leaving max (and range = max - min) unchanged."
+  },
+  {
+    "mutation": "> → >=",
+    "snippet": "for (let i = lo; i < hi; i++) { const abs = Math.abs(a[i]); if (abs > m) m = abs; }",
+    "reason": "equivalent: idempotent window-peak assign. When abs === m the mutant reassigns m = abs to the same value, so each window peak (and the envelope) is unchanged."
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": "for (let i = 1; i < n; i++) { if (xs[i] < min) min = xs[i]; if (xs[i] > max) max = xs[i]; ",
+    "reason": "equivalent: covers both < on this line. `xs[i] <= min` is an idempotent min reassign to an equal value; `i <= n` adds one no-op iteration where xs[n] is undefined so both `undefined < min` and `undefined > max` are false — nothing assigned."
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": "const settled = stdSecond < o.flatEps * spread;",
+    "reason": "equivalent: measure-zero float boundary. Behaviour differs only when stdSecond (a sqrt of variance) exactly equals flatEps*spread — an unconstructible exact float equality; at that single point FLATLINE vs ATTRACTOR is arbitrary either way."
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": "if (peaks.length < 2) return false;",
+    "reason": "equivalent: unreachable guard. isEnvelopeExpanding is only ever called with chunkMaxAbs(xs, 4), whose output length is always exactly 4, so both `< 2` and `<= 2` are always false — the guard never fires."
+  },
+  {
+    "mutation": "< → <=",
+    "snippet": "for (let i = 1; i < peaks.length; i++) if (peaks[i] < peaks[i - 1] * 1.15) return false;",
+    "reason": "equivalent: the surviving mutant is the loop bound `i <= peaks.length`, adding one no-op iteration where peaks[i] is undefined so `undefined < peaks[i-1]*1.15` is false. (The other < on this line, `peaks[i] <= ...`, is killed by the exactly-1.15 test.)"
+  },
+  {
+    "mutation": "return false → return true",
+    "snippet": "if (peaks.length < 2) return false;",
+    "reason": "equivalent: unreachable statement. peaks.length is always 4 (chunkMaxAbs k=4), so `peaks.length < 2` is never true and this return never executes — flipping its value cannot change behaviour."
+  }
+]
