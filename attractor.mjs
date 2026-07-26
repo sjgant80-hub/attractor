@@ -41,7 +41,9 @@ export function classify(series, opts = {}) {
   const firstQ = xs.slice(0, q);
   const lastQ = xs.slice(n - q);
 
-  const min = Math.min(...xs), max = Math.max(...xs);
+  // loop, not Math.min(...xs) — spreading a large array (~130k+) overflows the call stack.
+  let min = xs[0], max = xs[0];
+  for (let i = 1; i < n; i++) { if (xs[i] < min) min = xs[i]; if (xs[i] > max) max = xs[i]; }
   const range = max - min;
   // "Settled" is judged against the trajectory's SPREAD (range), not its absolute level. Folding the
   // mean into the scale made the test translation-variant — a live oscillation riding on a DC offset
@@ -94,11 +96,17 @@ export function isAlive(series, opts) { return classify(series, opts).alive; }
 function mean(a) { return a.reduce((s, x) => s + x, 0) / a.length; }
 function meanAbs(a) { return a.reduce((s, x) => s + Math.abs(x), 0) / a.length; }
 function variance(a) { if (a.length < 2) return 0; const m = mean(a); return a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length; }
-// Peak |x| per window — the trajectory's ENVELOPE, sampled in k chunks.
+// Peak |x| per window — the trajectory's ENVELOPE, sampled in EXACTLY k evenly-divided windows (a
+// floor(len/k) step left a ragged extra window for odd lengths, which broke the monotonic-envelope
+// test for e.g. a linear runaway at n=9/11/13). Loop-based max, no array spread (stack-safe on big N).
 function chunkMaxAbs(a, k) {
-  const size = Math.max(1, Math.floor(a.length / k));
   const out = [];
-  for (let i = 0; i < a.length; i += size) out.push(Math.max(...a.slice(i, i + size).map(Math.abs)));
+  for (let w = 0; w < k; w++) {
+    const lo = Math.floor(w * a.length / k), hi = Math.floor((w + 1) * a.length / k);
+    let m = 0;
+    for (let i = lo; i < hi; i++) { const abs = Math.abs(a[i]); if (abs > m) m = abs; }
+    out.push(m);
+  }
   return out;
 }
 // The envelope is EXPANDING (a runaway) iff every window's peak clearly exceeds the previous, the

@@ -105,6 +105,18 @@ test('numeric STRINGS are accepted as data (the kept-branch is exercised)', () =
   assert.equal(r.metrics.n, 12);
 });
 
+test('a linear runaway is ESCAPED at ODD sample lengths too (even windowing)', () => {
+  for (const n of [9, 11, 13, 15, 40]) {
+    assert.equal(classify(Array.from({ length: n }, (_, i) => i * 3)).class, CLASS.ESCAPED, `n=${n}`);
+  }
+});
+
+test('a large valid input does not crash (no array-spread stack overflow)', () => {
+  const big = Array.from({ length: 200000 }, (_, i) => Math.sin(i * 0.1) * 5);
+  const r = classify(big);
+  assert.equal(r.class, CLASS.ATTRACTOR, 'a 200k-point bounded oscillation classifies without crashing');
+});
+
 test('classification is deterministic — same series, same verdict', () => {
   const s = logistic(80);
   assert.deepEqual(classify(s), classify(s));
