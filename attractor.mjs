@@ -43,15 +43,19 @@ export function classify(series, opts = {}) {
 
   const min = Math.min(...xs), max = Math.max(...xs);
   const range = max - min;
-  const scale = Math.max(range, meanAbs(xs), 1e-9);
+  // "Settled" is judged against the trajectory's SPREAD (range), not its absolute level. Folding the
+  // mean into the scale made the test translation-variant — a live oscillation riding on a DC offset
+  // (e.g. 1000 + sin) looked settled purely because of the baseline. Range carries the spread and is
+  // invariant to a constant shift, which is the physically meaningful thing here.
+  const spread = Math.max(range, 1e-9);
 
   const varSecond = variance(second);
   const stdSecond = Math.sqrt(varSecond);
   const magFirst = meanAbs(firstQ), magLast = meanAbs(lastQ);
   const growth = magLast / Math.max(magFirst, 1e-9);
 
-  // Settled: the recent portion barely moves relative to the trajectory's own scale.
-  const settled = stdSecond < o.flatEps * scale;
+  // Settled: the recent portion barely moves relative to the trajectory's spread.
+  const settled = stdSecond < o.flatEps * spread;
   // Divergence: magnitude has grown strongly AND is still trending up across successive windows AND
   // has NOT settled. A bounded step-response that ramps up from a low base and then plateaus has a
   // high growth ratio but a flat, settled tail — that is a FLATLINE (reached its setpoint), not a
@@ -69,7 +73,7 @@ export function classify(series, opts = {}) {
     alive: cls === CLASS.ATTRACTOR,
     metrics: {
       n, min: r4(min), max: r4(max), range: r4(range),
-      recentStd: r4(stdSecond), scale: r4(scale),
+      recentStd: r4(stdSecond), spread: r4(spread),
       growth: r4(growth), settled, diverging,
     },
     explain: EXPLAIN[cls],

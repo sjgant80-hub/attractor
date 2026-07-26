@@ -77,6 +77,21 @@ test('a bounded step-response that settles at a setpoint is FLATLINE, not ESCAPE
   assert.equal(r.metrics.diverging, false);
 });
 
+test('classification is translation-invariant — a DC offset does not flip alive↔dead', () => {
+  for (const base of [0, 100, 1000, -1000]) {
+    const osc = Array.from({ length: 60 }, (_, i) => base + Math.sin(i * 0.6) * 5);
+    assert.equal(classify(osc).class, CLASS.ATTRACTOR, `sine on baseline ${base} is still a live oscillation`);
+  }
+  // and a genuine flatline stays flat regardless of level
+  assert.equal(classify(constant(1000, 40)).class, CLASS.FLATLINE);
+});
+
+test('numeric STRINGS are accepted as data (the kept-branch is exercised)', () => {
+  const r = classify(['0', '1', '0', '-1', '0', '1', '0', '-1', '0', '1', '0', '-1']);
+  assert.notEqual(r.class, CLASS.UNKNOWN, 'numeric strings count as real points');
+  assert.equal(r.metrics.n, 12);
+});
+
 test('classification is deterministic — same series, same verdict', () => {
   const s = logistic(80);
   assert.deepEqual(classify(s), classify(s));
