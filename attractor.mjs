@@ -51,17 +51,17 @@ export function classify(series, opts = {}) {
 
   const varSecond = variance(second);
   const stdSecond = Math.sqrt(varSecond);
-  const magFirst = meanAbs(firstQ), magLast = meanAbs(lastQ);
-  const growth = magLast / Math.max(magFirst, 1e-9);
 
   // Settled: the recent portion barely moves relative to the trajectory's spread.
   const settled = stdSecond < o.flatEps * spread;
-  // Divergence: magnitude has grown strongly AND is still trending up across successive windows AND
-  // has NOT settled. A bounded step-response that ramps up from a low base and then plateaus has a
-  // high growth ratio but a flat, settled tail — that is a FLATLINE (reached its setpoint), not a
-  // runaway. Requiring !settled stops the low-base growth ratio from raising a false escape alarm.
-  const windowMags = chunkMeans(xs.map(Math.abs), 4);
-  const diverging = growth > o.escapeGrowth && isTrendingUp(windowMags) && !settled;
+  // Divergence is judged by the ENVELOPE (peak |x| per window), not a mean-magnitude ratio. A
+  // magnitude ratio off a near-zero start (a delayed onset or amplitude ramp-up) explodes even though
+  // the trajectory is strictly bounded, so it can't tell a booting oscillator from a runaway. An
+  // escaped trajectory instead has an envelope that keeps EXPANDING to the end: each window's peak
+  // clearly exceeds the previous and the last is the global peak. A bounded oscillation plateaus.
+  const windowPeaks = chunkMaxAbs(xs, 4);
+  const growth = windowPeaks[windowPeaks.length - 1] / Math.max(windowPeaks[0], 1e-9);
+  const diverging = isEnvelopeExpanding(windowPeaks, o.escapeGrowth) && !settled;
 
   let cls;
   if (diverging) cls = CLASS.ESCAPED;
@@ -94,18 +94,21 @@ export function isAlive(series, opts) { return classify(series, opts).alive; }
 function mean(a) { return a.reduce((s, x) => s + x, 0) / a.length; }
 function meanAbs(a) { return a.reduce((s, x) => s + Math.abs(x), 0) / a.length; }
 function variance(a) { if (a.length < 2) return 0; const m = mean(a); return a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length; }
-function chunkMeans(a, k) {
+// Peak |x| per window — the trajectory's ENVELOPE, sampled in k chunks.
+function chunkMaxAbs(a, k) {
   const size = Math.max(1, Math.floor(a.length / k));
   const out = [];
-  for (let i = 0; i < a.length; i += size) out.push(meanAbs(a.slice(i, i + size)));
+  for (let i = 0; i < a.length; i += size) out.push(Math.max(...a.slice(i, i + size).map(Math.abs)));
   return out;
 }
-// Trending up = each successive window is >= the previous (allowing tiny noise), net strongly up.
-function isTrendingUp(w) {
-  if (w.length < 2) return false;
-  let ups = 0;
-  for (let i = 1; i < w.length; i++) if (w[i] >= w[i - 1] * 0.98) ups++;
-  return ups >= w.length - 2 && w[w.length - 1] > w[0] * 1.5;
+// The envelope is EXPANDING (a runaway) iff every window's peak clearly exceeds the previous, the
+// last window holds the global peak, and the net growth crosses the escape factor. A bounded
+// oscillation — even one with a quiet start — plateaus, so an intermediate window fails the growth step.
+function isEnvelopeExpanding(peaks, escapeGrowth) {
+  if (peaks.length < 2) return false;
+  for (let i = 1; i < peaks.length; i++) if (peaks[i] < peaks[i - 1] * 1.15) return false;
+  const last = peaks[peaks.length - 1];
+  return last === Math.max(...peaks) && last > peaks[0] * Math.max(2, escapeGrowth);
 }
 function r4(x) { return Math.round(x * 10000) / 10000; }
 

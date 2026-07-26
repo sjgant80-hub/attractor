@@ -77,6 +77,19 @@ test('a bounded step-response that settles at a setpoint is FLATLINE, not ESCAPE
   assert.equal(r.metrics.diverging, false);
 });
 
+test('a bounded oscillation with a QUIET START (delayed onset) is ATTRACTOR, not ESCAPED', () => {
+  // silent for the first quarter, then a sustained bounded oscillation — a booting live system
+  const boot = Array.from({ length: 60 }, (_, i) => (i < 15 ? 0 : 3 * Math.sin(i * 0.6)));
+  const r = classify(boot);
+  assert.equal(r.class, CLASS.ATTRACTOR, 'a near-zero start must not read as runaway');
+  assert.equal(r.metrics.diverging, false);
+});
+
+test('a bounded oscillation whose AMPLITUDE ramps then holds is ATTRACTOR, not ESCAPED', () => {
+  const ramp = Array.from({ length: 60 }, (_, i) => Math.min(5, 0.1 + i * 0.16) * Math.sin(i * 0.6));
+  assert.equal(classify(ramp).class, CLASS.ATTRACTOR);
+});
+
 test('classification is translation-invariant — a DC offset does not flip alive↔dead', () => {
   for (const base of [0, 100, 1000, -1000]) {
     const osc = Array.from({ length: 60 }, (_, i) => base + Math.sin(i * 0.6) * 5);
@@ -97,8 +110,8 @@ test('classification is deterministic — same series, same verdict', () => {
   assert.deepEqual(classify(s), classify(s));
 });
 
-test('every verdict carries a human explanation', () => {
-  for (const s of [constant(5, 20), sine(40), exponential(25)]) {
-    assert.ok(classify(s).explain && classify(s).explain.length > 10);
-  }
+test('the explanation matches the verdict (not just any long string)', () => {
+  assert.match(classify(constant(5, 20)).explain, /settled|fixed point|converged/i);
+  assert.match(classify(sine(40)).explain, /bounded|never settling|self-sustaining/i);
+  assert.match(classify(exponential(25)).explain, /running away|diverging|runaway/i);
 });
