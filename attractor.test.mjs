@@ -127,3 +127,65 @@ test('the explanation matches the verdict (not just any long string)', () => {
   assert.match(classify(sine(40)).explain, /bounded|never settling|self-sustaining/i);
   assert.match(classify(exponential(25)).explain, /running away|diverging|runaway/i);
 });
+
+// ── boundary/branch tests designed against witness mutation survivors ─────────
+
+test('EXACTLY minPoints (8) points is enough to classify — not UNKNOWN (< boundary)', () => {
+  // pins the `xs.length < o.minPoints` boundary: 8 points must pass, not be rejected.
+  // a `<=` mutant would reject exactly-8 as UNKNOWN.
+  const r = classify([0, 1, 0, -1, 0, 1, 0, -1]);
+  assert.notEqual(r.class, CLASS.UNKNOWN, '8 finite points meets the minimum');
+  assert.equal(r.metrics.n, 8);
+});
+
+test('metrics.growth is the finite last/first envelope ratio, never NaN (index -1)', () => {
+  // pins `windowPeaks[windowPeaks.length - 1]`: a `+ 1` mutant reads past the end (undefined)
+  // and makes growth NaN. Assert it is finite and equals lastPeak/firstPeak for a linear runaway.
+  const r = classify(Array.from({ length: 40 }, (_, i) => i * 3));
+  assert.ok(Number.isFinite(r.metrics.growth), 'growth must be a finite number, not NaN');
+  assert.ok(r.metrics.growth > 1, 'a runaway grows across its envelope');
+});
+
+test('variance of a length-2 tail is computed, not short-circuited to 0 (< 2 guard)', () => {
+  // with minPoints lowered so the second-half tail is exactly 2 points, the variance guard
+  // `a.length < 2` must still compute a real variance. A `<= 2` mutant returns 0 → std 0 →
+  // spuriously "settled" → FLATLINE. Correct code sees the oscillation and returns ATTRACTOR.
+  const r = classify([0, 5, 0, 5], { minPoints: 4 });
+  assert.equal(r.class, CLASS.ATTRACTOR, 'a moving length-2 tail is not settled');
+  assert.equal(r.metrics.settled, false);
+});
+
+test('window peaks use half-open [lo,hi) ranges — no boundary bleed (< hi loop)', () => {
+  // Designed so an `i <= hi` mutant pulls the next window\'s leading value into the current
+  // window: that flattens the envelope\'s final ratio below 1.15, so the mutant sees ATTRACTOR
+  // while the correct half-open windowing sees a genuine runaway.
+  const r = classify([1, 3, 5, 7, 9, 11, 100, 50]);
+  assert.equal(r.class, CLASS.ESCAPED, 'last-window spike is a runaway envelope');
+  assert.equal(r.metrics.diverging, true);
+});
+
+test('envelope growth uses strict > 1.15× per window — a ratio of exactly 1.15 still expands (< boundary)', () => {
+  // second window peak is EXACTLY 1.15× the first (1 → 1.15). The check `peaks[i] < peaks[i-1]*1.15`
+  // must treat equality as "still expanding" (strict <). A `<=` mutant would reject the exact-1.15
+  // step as a plateau and mislabel this clear runaway as non-escaped.
+  const r = classify([1, 1, 1.15, 1.15, 3, 3, 10, 10]);
+  assert.equal(r.class, CLASS.ESCAPED, 'a window at exactly 1.15× is still part of an expanding envelope');
+});
+
+test('divergence requires BOTH last===peak AND net growth past the factor (&& not ||)', () => {
+  // a monotonic envelope [1, 1.2, 1.44, 1.728]: every window grows >15% (last IS the global peak),
+  // but net growth (1.728×) never reaches the escape factor (3×). Correct AND ⇒ ATTRACTOR.
+  // An `||` mutant fires on the "last===peak" clause alone and wrongly calls it ESCAPED.
+  const r = classify([1, 1, 1.2, 1.2, 1.44, 1.44, 1.728, 1.728]);
+  assert.equal(r.class, CLASS.ATTRACTOR, 'monotonic but sub-threshold growth is a live attractor, not runaway');
+  assert.equal(r.metrics.diverging, false);
+});
+
+test('escape needs net growth STRICTLY past the factor — exactly factor× is not escaped (> boundary)', () => {
+  // envelope [1, 1.4, 2, 3]: last peak is EXACTLY 3× the first (== escapeGrowth factor 3).
+  // `last > peaks[0]*factor` is strict, so exactly-3× does NOT diverge ⇒ ATTRACTOR.
+  // A `>=` mutant would treat the exact factor as a runaway and flip it to ESCAPED.
+  const r = classify([1, 1, 1.4, 1.4, 2, 2, 3, 3]);
+  assert.equal(r.class, CLASS.ATTRACTOR, 'reaching exactly the escape factor is the boundary, not past it');
+  assert.equal(r.metrics.diverging, false);
+});
