@@ -1,0 +1,18 @@
+{
+  "id": "attractor",
+  "ring": "R0-ground",
+  "mesh": "niceassos-mesh",
+  "konomified": null,
+  "proof": {
+    "benchmark": "assessor-v0.7",
+    "core": "10/10",
+    "hash": "58951486a8ecf1e26c047c17d47c068a"
+  },
+  "behaviour": {
+    "gate": "witness",
+    "clean": true,
+    "score": 0.714,
+    "source": "attractor.mjs",
+    "skipped": false
+  }
+}
